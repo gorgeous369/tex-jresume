@@ -1,0 +1,682 @@
+%%
+%% A style file for the resume meets JIS Z 8303:2008
+%%
+%% Copyright 2016 grktsh
+%%
+%% It may be distributed and/or modified under the
+%% conditions of the LaTeX Project Public License, either version 1.3c
+%% of this license or (at your option) any later version.
+%% The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 2005/12/01 or later.
+%%
+\NeedsTeXFormat{pLaTeX2e}
+\ProvidesPackage{jresume}
+
+\usepackage[margin=0pt,driver=dvipdfm]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usetikzlibrary{chains}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes.geometric}
+\usepackage{etoolbox}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+% 上から時計回りに 25mm 15mm 15mm 25mm のマージンをとった残りを
+% キャンバスと呼ぶようにする。キャンバスにはタイルが敷き詰められる。
+% タイルとは、固定サイズかつ inner/outer sep が 0pt の TikZ におけるノード。
+% 実際に敷き詰めるのには node distance を 0pt として chains ライブラリを使う。
+% 「履歴書」や提出日はタイルの上に置かれるからキャンバスの外に描画される。
+\newlength{\jr@canvaswidth}
+\deflength{\jr@canvaswidth}{\paperwidth - 25mm - 15mm}
+\newlength{\jr@canvasheight}
+\deflength{\jr@canvasheight}{\paperheight - 25mm - 15mm}
+
+% 敷き詰められたタイルの集まりのうち裏罫で囲まれたものを
+% ブロックと呼ぶようにする。ブロックが横に並ぶことはない。
+% ブロック間ですき間をもたせる部分ではすき間の高さは一定にする。
+\newlength{\jr@blockvskip}
+\setlength{\jr@blockvskip}{3mm}
+
+\newlength{\jr@smallheight}
+\setlength{\jr@smallheight}{5mm}
+
+\newlength{\jr@midheight}
+\setlength{\jr@midheight}{13mm}
+
+\newlength{\jr@bigheight}
+\setlength{\jr@bigheight}{17mm}
+
+%%% ユーティリティ
+
+% {<幅>}{<テキスト>}
+%
+% <テキスト> を <幅> の長さに均等割付する。
+\def\均等割付#1#2{%
+  \leavevmode
+  \hbox to #1{%
+    \@tfor\@tempa:=#2\do{\@tempa\hfil}%
+    \unskip}}
+
+% {<年>}{<月>}{<日>}
+%
+% \西暦 または \和暦の宣言に応じて、与えられた年月日を西暦または和暦に変換する。
+\def\西暦or和暦#1#2#3{
+  \ifbool{西暦}{#1 年 #2 月 #3 日}{
+    \ifboolexpr{
+      test {\ifnumequal{#1}{1989}}
+      and
+      test {\ifnumequal{#2}{1}}
+      and
+      test {\ifnumcomp{#3}{<}{8}}
+    }{昭和 64 年 #2 月 #3 日}{%
+      \ifnumcomp{#1}{<}{1989}{昭和 \number\numexpr#1-1925\relax{} }{
+        \ifnumequal{#1}{1989}{平成元}{平成 \number\numexpr#1-1988\relax{} }}%
+      年 #2 月 #3 日}}}
+
+% {<年>}
+%
+% \西暦 または \和暦の宣言に応じて、与えられた年を西暦または和暦に変換する。
+%
+% 1989 年に対応する和暦の元号は 2 つあるため、<年> が和暦の場合
+% （<年> が 1 または 2 で始まらない場合）そのまま出力することで
+% 「昭和 64」を出力できるようにする。
+\def\maybe和暦#1{%
+  \edef\@tempa{\expandafter\@car#1tail\@nil}
+  \ifboolexpr{
+    bool {西暦}
+    or
+    not
+    (
+    test {\expandafter\ifstrequal\expandafter{\@tempa}{1}}
+    or
+    test {\expandafter\ifstrequal\expandafter{\@tempa}{2}}
+    )
+  }{#1}{\ifnumcomp{#1}{<}{1989}{昭和 \number\numexpr#1-1925\relax}{
+      \ifnumequal{#1}{1989}{平成元}{平成 \number\numexpr#1-1988\relax}}}}
+
+%%% ユーザインタフェース
+
+% マクロを使う＝対応する項目の内容を表示する、とする。
+% そのため項目の内容を表示しない場合は空の引数を渡すのではなく、
+% そのマクロを使わないようにすること。
+% 簡単のために空の引数を使った場合の動作は不定とする。
+% つまり「\姓」のように問題なく動作するマクロもあるし、
+% 「\生年月日」のようにそうでないマクロもある。
+
+% draw circle if スタイルで使用するためあらかじめ定義しておく。
+\def\jr@性別{}
+\def\jr@配偶者{}
+\def\jr@配偶者の扶養義務{}
+
+\newcount\jr@@year
+\newcount\jr@@month
+\newcount\jr@@day
+
+% {<年>}{<月>}{<日>}
+\def\提出日#1#2#3{
+  \jr@@year#1 \jr@@month#2 \jr@@day#3
+  \def\jr@提出日{\西暦or和暦{#1}{#2}{#3}}}
+
+% {<姓>}{<よみ>}
+\def\姓#1#2{
+  \def\jr@姓{#1}
+  \def\jr@姓@よみ{#2}}
+
+\def\jr@姓{}
+\def\jr@姓@よみ{}
+
+% {<名>}{<よみ>}
+\def\名#1#2{
+  \def\jr@名{#1}
+  \def\jr@名@よみ{#2}}
+
+\def\jr@名{}
+\def\jr@名@よみ{}
+
+% {<年>}{<月>}{<日>}
+\def\生年月日#1#2#3{
+  \def\jr@生年月日{\西暦or和暦{#1}{#2}{#3}}
+  \ifundef{\jr@提出日}{}{
+    \def\jr@年齢{%
+      \@tempcnta\numexpr \jr@@year*10000 + \jr@@month*100 + \jr@@day\relax
+      \@tempcntb\numexpr #1*10000 + #2*100 + #3\relax
+      \advance\@tempcnta -\@tempcntb
+      \divide\@tempcnta 10000
+      \number\@tempcnta}}}
+
+% {男 or 女}
+\def\性別#1{
+  \def\jr@性別{#1}}
+
+% {<画像ファイルのパス>}
+\def\顔写真#1{
+  \def\jr@顔写真{#1}}
+
+% 以下のマクロを定義する。
+%
+% \現住所郵便番号{###}{####}
+% \現住所{<住所>}{<よみ>}
+% \現住所固定電話{##}{####}{####}
+% \現住所携帯電話{###}{####}{####}
+% \現住所電子メール{<メールアドレス>}
+% \連絡先郵便番号{###}{####}
+% \連絡先{<住所>}{<よみ>}
+% \連絡先固定電話{##}{####}{####}
+% \連絡先携帯電話{###}{####}{####}
+% \連絡先電子メール{<メールアドレス>}
+\def\jr@def@address@macros#1{
+  \csgdef{#1郵便番号}##1##2{
+    \csgdef{jr@#1@郵便番号}{##1--##2}}
+
+  \csgdef{#1}##1##2{
+    \csgdef{jr@#1}{##1}
+    \csgdef{jr@#1@よみ}{##2}}
+
+  \csgdef{#1固定電話}##1##2##3{
+    \csgdef{jr@#1@固定電話}{##1--##2--##3}}
+
+  \csgdef{#1携帯電話}##1##2##3{
+    \csgdef{jr@#1@携帯電話}{##1--##2--##3}}
+
+  \csgdef{#1電子メール}##1{
+    \csgdef{jr@#1@電子メール}{##1}}
+}
+\foreach \x in {現住所,連絡先} {
+  \expandafter\jr@def@address@macros\expandafter{\x}
+}
+
+% {<姓>}{<名>}
+\def\連絡先呼び出し#1#2{
+  \def\jr@連絡先@呼び出し@姓{#1}
+  \def\jr@連絡先@呼び出し@名{#2}}
+
+\def\jr@list@append#1#2{%
+  \edef#1{\expandafter\ifstrempty\expandafter{#1}{}{#1,}#2}}
+
+% 以下のマクロを定義する。
+%
+% \学歴{<年>}{<月>}{<テキスト>}
+% \職歴{<年>}{<月>}{<テキスト>}
+% \免許資格{<年>}{<月>}{<テキスト>}
+\def\jr@def@history@counts@macros#1{
+  \expandafter\newcount\csname jr@#1count\endcsname
+  \expandafter\newcount\csname jr@#1offset\endcsname
+  \csgdef{jr@#1list}{}
+  \csgdef{#1}##1##2##3{
+    \expandafter\jr@list@append\expandafter{\csname jr@#1list\endcsname}{##1/##2/##3}
+    \expandafter\advance\csname jr@#1count\endcsname1}
+}
+\foreach \x in {学歴,職歴,免許資格} {
+  \expandafter\jr@def@history@counts@macros\expandafter{\x}
+}
+
+% {<志望の動機、特技、好きな学科、アピールポイントなど>}
+\long\def\志望の動機など#1{
+  \def\jr@志望の動機など{#1}}
+
+% {<時間>}{<分>}
+%
+% \通勤時間{}{50} は「約 50 分」
+% \通勤時間{1}{} は「約 1 時間」
+% \通勤時間{1}{50} は「約 1 時間 50 分」
+\def\通勤時間#1#2{
+  \def\jr@通勤時間{約
+    \ifstrempty{#1}{}{ #1 時間}
+    \ifstrempty{#2}{}{ #2 分}}}
+
+% {<路線>}{<駅>}
+\def\最寄り駅#1#2{
+  \def\jr@最寄り駅{#1線 #2駅}}
+
+% {<扶養家族数>}
+\def\扶養家族数#1{
+  \def\jr@扶養家族数{#1 人}}
+
+% {有 or 無}
+\def\配偶者#1{
+  \def\jr@配偶者{#1}}
+
+% {有 or 無}
+\def\配偶者の扶養義務#1{
+  \def\jr@配偶者の扶養義務{#1}}
+
+% {<本人希望記入欄>}
+\long\def\本人希望記入欄#1{
+  \def\jr@本人希望記入欄{#1}}
+
+\tikzset{
+  % 表罫と裏罫の定義は JIS Z 8303:2008 による。
+  表罫/.style={line width=.1mm},
+  裏罫/.style={line width=.45mm},
+  % フォントサイズは jsarticle のデフォルトのフォントサイズ 10pt で
+  % 規格に準拠するように調整しておく。
+  % date font は小さすぎると思うけど、規格準拠を優先して
+  % とりあえずそのままにしておく。
+  %
+  % フォントサイズを変更するには、jsarticle のサイズオプションではなく
+  % 下記の対応するフォントスタイルをプリアンブルで上書きするという仕様。
+  % フォントサイズに応じてレイアウトのサイズを変更するのは難しいため
+  % このような仕様にした。この仕様ならレイアウトの崩れない必要な箇所だけ
+  % フォントサイズを変更できる。
+  default font/.style={node font=\normalsize},
+  % 帳票の名称（10〜24pt かつ太字）
+  title font/.style={node font=\LARGE\sffamily\bfseries},
+  % 主要項目名（6〜14pt）
+  capital font/.style={node font=\Large},
+  % 項目名・説明など（6〜10pt）
+  label font/.style={node font=\footnotesize},
+  % 記入・処理の注意事項など（6〜10pt）
+  note font/.style={node font=\footnotesize},
+  % 帳票の様式番号、作成年月、改訂年月、帳票の大きさ、印刷枚数（6pt）
+  date font/.style={node font=\fontsize{6pt}{0pt}},
+  page layer/.style={
+    overlay,
+    baseline=-\baselineskip,
+    x=1mm,
+    y=1mm,
+    default font,
+    表罫,
+  },
+  tile/.style 2 args={
+    on chain,
+    anchor=north west,
+    minimum width=#1,
+    minimum height=#2,
+    inner sep=0,
+    outer sep=0,
+  },
+  tile label left/.style={
+    append after command={
+      node [label, below right=0pt of \tikzlastnode.north west] {#1}
+    },
+  },
+  tile hgroup/.style={
+    start branch=branch going {right=0pt of \tikzchainprevious.north east},
+  },
+  tile vgroup/.style={
+    start chain=going {below=0pt of \tikzchainprevious.south west},
+  },
+  tile label center/.style={
+    append after command={
+      node [label, below=0pt of \tikzlastnode.north] {#1}
+    },
+  },
+  label/.style={
+    label font,
+    minimum height=\jr@smallheight,
+  },
+  draw circle if/.style args={#1 is #2}{
+    inner sep=.5mm,
+    outer sep=0,
+    circle,
+    \if\csname jr@#1\endcsname\detokenize{#2}draw\fi,
+  },
+}
+
+%%% ページテンプレート
+
+\def\jrb@vskip{\node [tile={\jr@canvaswidth}{\jr@blockvskip}] {};}
+
+\def\履歴書iテンプレート{%
+  \begin{scope}[tile vgroup]
+    \jrb@個人情報
+    \jrb@vskip
+    \jrb@学歴職歴リスト{i}{16}
+    \node [on chain, anchor=north west, note font, inner xsep=0] {%
+      記入上の注意
+      \begin{tabular}{ll}
+        ①鉛筆以外の黒または青の筆記具で記入。& ②数字はアラビア数字で、文字はくずさず正確に書く。\\
+        ③※印のところは、該当するものを○で囲む。
+      \end{tabular}};
+  \end{scope}}
+
+\def\履歴書iiテンプレート{%
+  \begin{scope}[tile vgroup]
+    \jrb@学歴職歴リスト{ii}{6}
+    \jrb@免許資格リスト{6}
+    \jrb@vskip
+    \jrb@志望の動機
+    \jrb@vskip
+    \jrb@本人希望記入欄
+  \end{scope}}
+
+%%%% 個人情報
+
+% {ノード名prefixかつラベル}{width}
+\def\jr@tile@with@kana#1#2{%
+  \node (#1よみ) [tile={#2}{\jr@smallheight}, tile label left=ふりがな] {};
+  \node (#1)     [tile={#2}{\jr@bigheight},   tile label left=\均等割付{4zw}{#1}] {};
+
+  \draw [dotted] (#1.north west) -- (#1.north east);
+}
+
+% {ノード名prefix}
+\def\jr@tiles@tel@email#1{
+  \node (#1固定電話)     [tile={50mm}{\jr@smallheight},                    tile label left=電話（固定）] {};
+  \begin{scope}[tile hgroup]
+    \node (#1携帯電話)   [tile={50mm}{\jr@smallheight},                    tile label left=電話（携帯）] {};
+    \node (#1電子メール) [tile={\jr@canvaswidth - 100mm}{\jr@smallheight}, tile label left=電子メール] {};
+  \end{scope}
+
+  \draw [dotted] (#1携帯電話.north west) -- (#1携帯電話.south west)
+                 (#1携帯電話.north east) -- (#1携帯電話.south east);
+}
+
+\def\jrb@個人情報{%
+  \jr@tile@with@kana{氏名}{120mm}
+
+  \node (生年月日) [tile={100mm}{\jr@midheight}] {};
+  \begin{scope}[tile hgroup]
+    \node (性別)   [tile={20mm}{\jr@midheight}, tile label left=※] {};
+  \end{scope}
+
+  \jr@tile@with@kana{現住所}{\jr@canvaswidth}
+  \jr@tiles@tel@email{現住所}
+
+  \jr@tile@with@kana{連絡先}{\jr@canvaswidth}
+  \jr@tiles@tel@email{連絡先}
+
+  \node [note font, below left=0pt of 連絡先.north east] {（現住所以外に連絡を希望する場合のみ記入）};
+  \node (顔写真) [draw, dotted, anchor=south, yshift=\jr@blockvskip, minimum width=30mm-.2mm, minimum height=40mm-.2mm, inner sep=0, outer sep=0]
+  at ($ (性別.south east)!.5!(現住所よみ.north east) $) {};
+
+  \draw (生年月日.north west) -- (性別.north east);
+  \draw (生年月日.south west) -- (性別.south east);
+  \draw (生年月日.north east) -- (生年月日.south east);
+  \draw (現住所固定電話.north west) -- (現住所電子メール.north east);
+  \draw (連絡先よみ.north west) -- (連絡先よみ.north east);
+  \draw (連絡先固定電話.north west) -- (連絡先電子メール.north east);
+  \draw [裏罫] (氏名よみ.north west) -| (性別.south east) -| (連絡先電子メール.south east) -| cycle;
+}
+
+%%%% 年月リスト
+
+\newlength{\jr@history@year@width}
+\setlength{\jr@history@year@width}{25mm}
+
+\newlength{\jr@history@month@width}
+\setlength{\jr@history@month@width}{12mm}
+
+\newlength{\jr@history@text@width}
+\deflength{\jr@history@text@width}{\jr@canvaswidth - \jr@history@year@width - \jr@history@month@width}
+
+\newlength{\jr@history@item@height}
+\setlength{\jr@history@item@height}{10mm}
+
+% {<ノード名prefix>}{<リストアイテム数>}{<ヘッダテキスト>}
+\def\jrb@history#1#2#3{%
+  \node (#1 0 year)    [tile={\jr@history@year@width}{\jr@smallheight},        tile label center=年] {};
+  \begin{scope}[tile hgroup]
+    \node (#1 0 month) [tile={\jr@history@month@width}{\jr@smallheight},       tile label center=月] {};
+    \node (#1 0 text)  [tile={\jr@history@text@width}{\jr@smallheight}, tile label center=#3] {};
+  \end{scope}
+
+  \foreach \i in {1,...,#2} {
+    \node (#1 \i\space year)    [tile={\jr@history@year@width}{\jr@history@item@height}] {};
+    \begin{scope}[tile hgroup]
+      \node (#1 \i\space month) [tile={\jr@history@month@width}{\jr@history@item@height}] {};
+      \node (#1 \i\space text)  [tile={\jr@history@text@width}{\jr@history@item@height}] {};
+    \end{scope}
+  }
+
+  \foreach \i in {1,...,#2} {
+    \draw (#1 \i\space year.north west) -- (#1 \i\space text.north east);
+  }
+  \draw (#1 0 month.north east) -- (#1 #2 month.south east);
+  \draw [dotted] (#1 0 year.north east) -- (#1 #2 year.south east);
+  \draw [裏罫] (#1 0 year.north west) rectangle (#1 #2 text.south east);
+}
+\def\jrb@学歴職歴リスト#1#2{\jrb@history{学歴・職歴#1}{#2}{学歴・職歴（各別にまとめて書く）}}
+\def\jrb@免許資格リスト#1{\jrb@history{免許・資格}{#1}{免許・資格}}
+
+%%%% 志望の動機
+
+\def\jrb@志望の動機{%
+  \node (志望の動機など header) [tile={\jr@canvaswidth}{\jr@smallheight}, tile label left=志望の動機、特技、好きな学科、アピールポイントなど] {};
+  \node (志望の動機など)        [tile={\jr@canvaswidth}{67mm}] {};
+
+  \node (通勤時間 header)           [tile={35mm}{\jr@smallheight},                    tile label left=通勤時間] {};
+  \begin{scope}[tile hgroup]
+    \node (最寄り駅 header)         [tile={50mm}{\jr@smallheight},                    tile label left=最寄り駅] {};
+    \node (扶養家族数 header)       [tile={35mm}{\jr@smallheight},                    tile label left=扶養家族数（配偶者を除く）] {};
+    \node (配偶者 header)           [tile={20mm}{\jr@smallheight},                    tile label left=配偶者※] {};
+    \node (配偶者の扶養義務 header) [tile={\jr@canvaswidth - 140mm}{\jr@smallheight}, tile label left=配偶者の扶養義務※] {};
+  \end{scope}
+
+  \node (通勤時間)           [tile={35mm}{\jr@midheight-\jr@smallheight}] {};
+  \begin{scope}[tile hgroup]
+    \node (最寄り駅)         [tile={50mm}{\jr@midheight-\jr@smallheight}] {};
+    \node (扶養家族数)       [tile={35mm}{\jr@midheight-\jr@smallheight}] {};
+    \node (配偶者)           [tile={20mm}{\jr@midheight-\jr@smallheight}] {};
+    \node (配偶者の扶養義務) [tile={\jr@canvaswidth - 140mm}{\jr@midheight-\jr@smallheight}] {};
+  \end{scope}
+
+  \draw (志望の動機など.north west) -- (志望の動機など.north east);
+  \draw (志望の動機など.south west) -- (志望の動機など.south east);
+  \draw (最寄り駅 header.north west) -- (最寄り駅.south west);
+  \draw (最寄り駅 header.north east) -- (最寄り駅.south east);
+  \draw (配偶者 header.north west) -- (配偶者.south west);
+  \draw (配偶者 header.north east) -- (配偶者.south east);
+  \draw [裏罫] (志望の動機など header.north west) rectangle (配偶者の扶養義務.south east);
+}
+
+%%%% 本人希望記入欄
+
+\def\jrb@本人希望記入欄{%
+  \node (本人希望記入欄 header) [tile={\jr@canvaswidth}{\jr@smallheight},
+                                 tile label left=本人希望記入欄（特に給料・職種・勤務時間・勤務地・その他についての希望などがあれば記入）] {};
+  \node (本人希望記入欄)        [tile={\jr@canvaswidth}{\jr@canvasheight
+    - \jr@smallheight
+    - 6\jr@history@item@height
+    - \jr@smallheight
+    - 6\jr@history@item@height
+    - \jr@blockvskip
+    - \jr@smallheight
+    - 67mm
+    - \jr@midheight
+    - \jr@blockvskip
+    - \jr@smallheight}] {};
+
+  \draw (本人希望記入欄.north west) -- (本人希望記入欄.north east);
+  \draw [裏罫] (本人希望記入欄 header.north west) rectangle (本人希望記入欄.south east);
+}
+
+%%% ページレイヤ
+
+\def\履歴書i{%
+  \begin{tikzpicture}[page layer, shift={(25,-25)}]
+    \履歴書iテンプレート
+
+    \begin{scope}[inner xsep=0, inner ysep=1mm]
+      \path (氏名よみ.north west) node [above right, title font] {\均等割付{3.5zw}{履歴書}}; %kanjiskip が効かない
+      \path (氏名よみ.north east) node [above left, date font]   {%
+        \ifdef{\jr@提出日}{\jr@提出日}{年 \qquad 月 \qquad 日}現在};
+    \end{scope}
+
+    \begin{scope}[inner xsep=0]
+      \path [label]        (氏名よみ) node [left=2mm] {\jr@姓@よみ} node [right=2mm] {\jr@名@よみ};
+      \path [capital font] (氏名)     node [left=2mm] {\jr@姓}      node [right=2mm] {\jr@名};
+    \end{scope}
+
+    \jr@two@choice(男,女){性別};
+
+    % 適当なところで align しておく。
+    \begin{scope}[every node/.style={right, xshift=\jr@history@year@width+\jr@history@month@width}]
+      \path (生年月日.west) node {%
+        \ifdef{\jr@生年月日}{\jr@生年月日}{\qquad 年 \qquad 月 \qquad 日}生 （満 %
+        \ifdef{\jr@年齢}{\jr@年齢}{\qquad} 歳）};
+
+      \foreach \x in {現住所,連絡先} {
+        \path (\x よみ.west) node [label] {\csuse{jr@\x @よみ}};
+        \path (\x.west)      node         {\csuse{jr@\x}};
+      }
+    \end{scope}
+
+    \foreach \x in {現住所,連絡先} {
+      \path [label] (\x.north west) node [below right] {\hspace{5zw}〒\csuse{jr@\x @郵便番号}};
+      \path [label] (\x 固定電話.west) node [right] {\hspace{6.5zw}\csuse{jr@\x @固定電話}};
+      \path [label] (\x 携帯電話.west) node [right] {\hspace{6.5zw}\csuse{jr@\x @携帯電話}};
+      % text depth オプションで valign を調整。
+      \path [label] (\x 電子メール.west) node [right, text depth=0, font=\ttfamily] {\hspace{6zw}\csuse{jr@\x @電子メール}};
+    }
+
+    \path (連絡先.south east) node [above left] {%
+      \ifdef{\jr@連絡先@呼び出し@姓}{\jr@連絡先@呼び出し@姓}{}
+      \ifdef{\jr@連絡先@呼び出し@名}{\jr@連絡先@呼び出し@名}{}
+      方};
+
+    \ifdef{\jr@顔写真}{
+      \path (顔写真) node {\includegraphics[width=30mm]{\jr@顔写真}};
+    }{
+      \path (顔写真) node [text width=.85*30mm, note font] {%
+        \hfil 写真をはる位置 \hfil %\centering が効かないから \hfil で
+        \vskip\baselineskip
+        写真をはる必要がある場合
+        \deflength{\leftmargini}{1zw + \pgfkeysvalueof{/pgf/inner xsep}}
+        \setlength{\labelsep}{\pgfkeysvalueof{/pgf/inner xsep}}
+        \begin{enumerate}
+        \item 縦\quad 36〜40mm\\横\quad 24〜30mm
+        \item 本人単身胸から上
+        \item 裏面のりずけ
+        \end{enumerate}};
+    }
+
+    \jr@学歴職歴リスト{i}{16}
+  \end{tikzpicture}}
+
+\def\履歴書ii{%
+  \begin{tikzpicture}[page layer, shift={(25,-25)}]
+    \履歴書iiテンプレート
+
+    \jr@学歴職歴リスト{ii}{6}
+    \jr@免許資格リスト{6}
+
+    \begin{scope}[below right, inner sep=3mm, text width=\jr@canvaswidth-6mm]
+      \ifdef{\jr@志望の動機など}{\path (志望の動機など.north west) node {\parskip=3mm\jr@志望の動機など}}{};
+      \ifdef{\jr@本人希望記入欄}{\path (本人希望記入欄.north west) node {\parskip=3mm\jr@本人希望記入欄}}{};
+    \end{scope}
+
+    % TODO: text width の値をノードから計算する
+    \begin{scope}[inner sep=3mm]
+      \path (通勤時間)   node [align=center, text width=35mm - 6mm] {\ifdef{\jr@通勤時間}{\jr@通勤時間}{約 \hfill 時間 \hfill 分}};
+      \path (最寄り駅)   node [align=center, text width=50mm - 6mm] {\ifdef{\jr@最寄り駅}{\jr@最寄り駅}{\hfill 線 \hfill 駅}};
+      \path (扶養家族数) node [align=center, text width=35mm - 6mm] {\ifdef{\jr@扶養家族数}{\jr@扶養家族数}{\hfill 人}};
+      \jr@two@choice(有,無){配偶者}
+      \jr@two@choice(有,無){配偶者の扶養義務};
+    \end{scope}
+  \end{tikzpicture}}
+
+% とじ穴
+%
+% * 直径 6 \pm 0.5 mm
+% * 間隔（穴の中心から中心まで）80 \pm 0.5 mm
+% * 紙の端から穴の中心まで 12 \pm 1.0 mm
+%
+\def\とじ穴{%
+  \begin{tikzpicture}[page layer, shift={(0,0)}, regular polygon, regular polygon sides=3, minimum size=2mm, inner sep=0]
+    \node (C) [draw, shape border rotate=90] at ($ (6,0)!.5!(6,-\paperheight) $) {};
+    \node [draw, fill, shape border rotate=-90, above=45mm of C.center] {};
+    \node [draw, fill, shape border rotate=-90, below=45mm of C.center] {};
+  \end{tikzpicture}}
+
+\def\履歴書{%
+  \とじ穴\履歴書i
+  \clearpage
+  \とじ穴\履歴書ii}
+
+% (選択肢1,選択肢2){ノード名}
+\def\jr@two@choice(#1,#2)#3{
+  \node [inner sep=0] (#3 choice) at (#3) {$\cdot$};
+  \node [draw circle if={#3 is #1}, left=0pt of #3 choice] {#1};
+  \node [draw circle if={#3 is #2}, right=0pt of #3 choice] {#2};
+}
+
+%%%% 年月リストの書き出し
+
+\newtoggle{空行}
+\newtoggle{以上}
+
+\newcount\jr@history@index
+\newcount\jr@history@size
+
+% 学歴または職歴または免許資格をそれぞれの \jr@<種類>list から書き出す。
+% 書き出した分だけ \jr@<種類>offset と \jr@history@index を進める。
+%
+% {<ノード名prefix>}{<書き出すリストの種類>}
+\def\jr@history@write#1#2{
+  \edef\@tempa{\csuse{jr@#2list}}
+  \foreach \year/\month/\text [count=\i] in \@tempa {
+    \ifnumcomp{\i}{>}{\csuse{jr@#2offset}}{
+      \path (#1 \number\jr@history@index\space year) node {\maybe和暦{\year}};
+      \path (#1 \number\jr@history@index\space month) node {\month};
+      \path (#1 \number\jr@history@index\space text.west) node [right, xshift=3mm] {\text};
+
+      \global\advance\jr@history@index1
+      \global\csuse{jr@#2offset}\i
+      \ifnumcomp{\jr@history@index}{>}{\jr@history@size}{\breakforeach}{}
+    }
+  }
+}
+
+\def\jr@write@学歴or職歴#1#2{
+  % "学歴" または "職歴" の書き出し
+  \ifboolexpr{
+    test {\ifnumcomp{\csuse{jr@#2count}}{>}{0}}
+    and
+    test {\ifnumequal{\csuse{jr@#2offset}}{0}}
+  }{\path (学歴・職歴#1 \number\jr@history@index\space text) node {#2};
+    \advance\jr@history@index1}{}
+
+  \jr@history@write{学歴・職歴#1}{#2}
+}
+
+\def\jr@学歴職歴リスト#1#2{
+  \jr@history@index1
+  \jr@history@size#2
+
+  % 現在の状態から空行の有無を決める
+  \ifboolexpr{
+    test {\ifnumequal{\jr@学歴count}{\jr@学歴offset}}
+    or
+    test {\ifnumequal{\jr@職歴count}{0}}
+  }{\togglefalse{空行}}{\toggletrue{空行}}
+
+  \jr@write@学歴or職歴{#1}{学歴}
+
+  \ifnumcomp{\jr@history@index}{>}{\jr@history@size}{}{
+    % 空行の書き出し
+    \iftoggle{空行}{\advance\jr@history@index1}{}
+
+    \jr@write@学歴or職歴{#1}{職歴}
+
+    % 学歴と職歴の書き出し後の状態から "以上" の有無を決める
+    \ifboolexpr{
+      test {\ifnumcomp{\jr@学歴count}{>}{0}}
+      and
+      test {\ifnumequal{\jr@学歴count}{\jr@学歴offset}}
+    }{\toggletrue{以上}}{\togglefalse{以上}}
+
+    \ifnumequal{\jr@職歴count}{0}{}{
+      \ifnumequal{\jr@職歴count}{\jr@職歴offset}
+      {\toggletrue{以上}}{\togglefalse{以上}}
+    }
+
+    % "以上" の書き出し
+    \iftoggle{以上}{\path (学歴・職歴#1 \number\jr@history@index\space text.east) node [left, inner xsep=3mm] {以上};}{}
+  }
+}
+
+\def\jr@免許資格リスト#1{
+  \jr@history@index1
+  \jr@history@size#1
+  \jr@history@write{免許・資格}{免許資格}
+}
+
+%% Local Variables:
+%% TeX-outline-extra: (("%% " 0) ("%%% " 1) ("%%%% " 2))
+%% outline-regexp: "%%+ "
+%% End:
