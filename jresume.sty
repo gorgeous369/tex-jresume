@@ -78,27 +78,6 @@
 \def\年月日#1#2#3{
   \年{#1}{#2}{#3}年 #2 月 #3 日}
 
-% {<年>}
-%
-% \西暦 または \和暦の宣言に応じて、与えられた年を西暦または和暦に変換する。
-%
-% 1989 年に対応する和暦の元号は 2 つあるため、<年> が和暦の場合
-% （<年> が 1 または 2 で始まらない場合）そのまま出力することで
-% 「昭和 64」を出力できるようにする。
-\def\maybe和暦#1{%
-  \edef\@tempa{\expandafter\@car#1tail\@nil}
-  \ifboolexpr{
-    bool {西暦}
-    or
-    not
-    (
-    test {\expandafter\ifstrequal\expandafter{\@tempa}{1}}
-    or
-    test {\expandafter\ifstrequal\expandafter{\@tempa}{2}}
-    )
-  }{#1}{\ifnumcomp{#1}{<}{1989}{昭和 \number\numexpr#1-1925\relax}{
-      \ifnumequal{#1}{1989}{平成元}{平成 \number\numexpr#1-1988\relax}}}}
-
 %%% ユーザインタフェース
 
 % マクロを使う＝対応する項目の内容を表示する、とする。
