@@ -53,19 +53,30 @@
 
 % {<年>}{<月>}{<日>}
 %
-% \西暦 または \和暦の宣言に応じて、与えられた年月日を西暦または和暦に変換する。
-\def\西暦or和暦#1#2#3{
-  \ifbool{西暦}{#1 年 #2 月 #3 日}{
+% \西暦 または \和暦の宣言に応じて、
+% 与えられた年月日の年を西暦または和暦に変換する。
+\def\年#1#2#3{
+  \ifbool{西暦}{#1}{
     \ifboolexpr{
-      test {\ifnumequal{#1}{1989}}
-      and
-      test {\ifnumequal{#2}{1}}
-      and
+      test {\ifnumcomp{#1}{=}{1989}} and
+      test {\ifnumcomp{#2}{=}{1}} and
       test {\ifnumcomp{#3}{<}{8}}
-    }{昭和 64 年 #2 月 #3 日}{%
+    }{昭和 64 }{
       \ifnumcomp{#1}{<}{1989}{昭和 \number\numexpr#1-1925\relax{} }{
-        \ifnumequal{#1}{1989}{平成元}{平成 \number\numexpr#1-1988\relax{} }}%
-      年 #2 月 #3 日}}}
+        \ifnumcomp{#1}{=}{1989}{平成元}{
+          \ifboolexpr{
+            test {\ifnumcomp{#1}{<}{2019}} or
+            ( test {\ifnumcomp{#1}{=}{2019}} and test {\ifnumcomp{#2}{<}{5}} )
+          }{平成 \number\numexpr#1-1988\relax{} }{
+            \ifnumcomp{#1}{=}{2019}{令和元}{
+              令和 \number\numexpr#1-2018\relax{} }}}}}}}
+
+% {<年>}{<月>}{<日>}
+%
+% \西暦 または \和暦の宣言に応じて、
+% 与えられた年月日を西暦または和暦に変換する。
+\def\年月日#1#2#3{
+  \年{#1}{#2}{#3}年 #2 月 #3 日}
 
 % {<年>}
 %
@@ -109,7 +120,7 @@
 % {<年>}{<月>}{<日>}
 \def\提出日#1#2#3{
   \jr@@year#1 \jr@@month#2 \jr@@day#3
-  \def\jr@提出日{\西暦or和暦{#1}{#2}{#3}}}
+  \def\jr@提出日{\年月日{#1}{#2}{#3}}}
 
 % {<姓>}{<よみ>}
 \def\姓#1#2{
@@ -129,7 +140,7 @@
 
 % {<年>}{<月>}{<日>}
 \def\生年月日#1#2#3{
-  \def\jr@生年月日{\西暦or和暦{#1}{#2}{#3}}
+  \def\jr@生年月日{\年月日{#1}{#2}{#3}}
   \ifundef{\jr@提出日}{}{
     \def\jr@年齢{%
       \@tempcnta\numexpr \jr@@year*10000 + \jr@@month*100 + \jr@@day\relax
@@ -189,15 +200,15 @@
 
 % 以下のマクロを定義する。
 %
-% \学歴{<年>}{<月>}{<テキスト>}
-% \職歴{<年>}{<月>}{<テキスト>}
-% \免許資格{<年>}{<月>}{<テキスト>}
+% \学歴{<年>}{<月>}{<日>}{<テキスト>}
+% \職歴{<年>}{<月>}{<日>}{<テキスト>}
+% \免許資格{<年>}{<月>}{<日>}{<テキスト>}
 \def\jr@def@history@counts@macros#1{
   \expandafter\newcount\csname jr@#1count\endcsname
   \expandafter\newcount\csname jr@#1offset\endcsname
   \csgdef{jr@#1list}{}
-  \csgdef{#1}##1##2##3{
-    \expandafter\jr@list@append\expandafter{\csname jr@#1list\endcsname}{##1/##2/##3}
+  \csgdef{#1}##1##2##3##4{
+    \expandafter\jr@list@append\expandafter{\csname jr@#1list\endcsname}{##1/##2/##3/##4}
     \expandafter\advance\csname jr@#1count\endcsname1}
 }
 \foreach \x in {学歴,職歴,免許資格} {
@@ -599,9 +610,12 @@
 % {<ノード名prefix>}{<書き出すリストの種類>}
 \def\jr@history@write#1#2{
   \edef\@tempa{\csuse{jr@#2list}}
-  \foreach \year/\month/\text [count=\i] in \@tempa {
+  \foreach \year/\month/\day/\text [count=\i] in \@tempa {
     \ifnumcomp{\i}{>}{\csuse{jr@#2offset}}{
-      \path (#1 \number\jr@history@index\space year) node {\maybe和暦{\year}};
+      \path (#1 \number\jr@history@index\space year) node {
+        \expandafter\ifstrempty\expandafter{\year}{}{
+          \年{\year}{\month}{\expandafter\ifstrempty\expandafter{\day}{1}{\day}}}
+      };
       \path (#1 \number\jr@history@index\space month) node {\month};
       \path (#1 \number\jr@history@index\space text.west) node [right, xshift=3mm] {\text};
 
